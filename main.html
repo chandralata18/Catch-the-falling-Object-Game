@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Catch the Falling Objects — Catch the Apples</title>
+  <style>
+    /* -------------------------
+       Basic page + background
+       ------------------------- */
+    :root{
+      --game-width: 1000px; /* max width of game area */
+      --game-height: 640px; /* preferred height */
+      --ui-height: 64px;
+      --accent: #ffffff;
+      --panel: rgba(0,0,0,0.25);
+    }
+
+    html,body{
+      height:100%;
+      margin:0;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      background-color:#2b7a39;
+      /* Use the user-specified image as a repeating (fallback) background */
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      box-sizing:border-box;
+    }
+
+    /* -------------------------
+       Centered game frame
+       ------------------------- */
+    .frame {
+      width: min(98vw, var(--game-width));
+      height: min(92vh, var(--game-height));
+      background: linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.12));
+      border-radius: 14px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.45), inset 0 1px rgba(255,255,255,0.02);
+      position: relative;
+      overflow: hidden;
+      display:flex;
+      flex-direction:column;
+      border: 2px solid rgba(0,0,0,0.15);
+    }
+
+    /* -------------------------
+       Top UI (restart | scores | pause)
+       ------------------------- */
+    .topbar {
+      height: var(--ui-height);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:8px 16px;
+      gap:12px;
+      color:var(--accent);
+      user-select:none;
+      z-index:40;
+    }
+
+    .left-ui, .center-ui, .right-ui {
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+
+    .btn {
+      background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.08);
+      color:var(--accent);
+      padding:8px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      font-weight:600;
+      font-size:14px;
+      backdrop-filter: blur(4px);
+      transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s;
+    }
+    .btn:hover{ transform: translateY(-3px); box-shadow: 0 6px 18px rgba(0,0,0,0.35);}
+    .btn:active{ transform: translateY(0); }
+
+    .scoreBox {
+      font-size:16px;
+      font-weight:700;
+      padding:6px 12px;
+      border-radius:999px;
+      background: rgba(0,0,0,0.18);
+      border:1px solid rgba(255,255,255,0.04);
+    }
+
+    /* -------------------------
+       The actual gameplay area
+       ------------------------- */
+    .playArea {
+      flex:1;
+      position:relative;
+      margin: 8px 12px 18px 12px;
+      border-radius: 10px;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.06));
+      display:block;
+      /* subtle grid overlay for depth */
+      box-shadow: inset 0 40px 60px rgba(0,0,0,0.12);
+    }
+
+    /* Decorative top-center "Score display" matches screenshot style */
+    .hudTopCenter {
+      position:absolute;
+      top:10px;
+      left:50%;
+      transform:translateX(-50%);
+      z-index: 30;
+      color:var(--accent);
+      font-weight:800;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.6);
+      pointer-events:none;
+    }
+
+    /* -------------------------
+       Basket (player)
+       ------------------------- */
+#basket {
+  position: absolute;
+  bottom: 20px;
+  width: 80px;
+  height: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  cursor: none;
+}
+
+#basket svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+
+    /* -------------------------
+       Falling object (apple)
+       ------------------------- */
+    .apple {
+      position:absolute;
+      width:44px;
+      height:44px;
+      pointer-events:none;
+      will-change: transform, top, left;
+      z-index:22;
+      transform-origin:center;
+    }
+    .apple img { width:100%; height:100%; object-fit:contain; display:block; }
+
+    /* small UI badges */
+    .livesBadge {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      font-weight:700;
+      font-size:14px;
+      color:var(--accent);
+      padding:6px 10px;
+      border-radius:999px;
+      background: rgba(0,0,0,0.12);
+      border:1px solid rgba(255,255,255,0.03);
+    }
+
+    /* -------------------------
+       Game Over overlay
+       ------------------------- */
+    .overlay {
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background: linear-gradient(180deg, rgba(0,0,0,0.38), rgba(0,0,0,0.5));
+      z-index:60;
+      color:var(--accent);
+      padding:20px;
+      text-align:center;
+      gap:12px;
+      flex-direction:column;
+      backdrop-filter: blur(4px);
+      display:none;
+    }
+    .overlay h1 { margin:0; font-size:36px; letter-spacing:1px; }
+    .overlay p { margin:0; opacity:0.9; font-weight:600; }
+    .overlay .small { font-size:14px; opacity:0.85; }
+
+    /* subtle responsiveness */
+    @media (max-width:720px){
+      .basket { width:90px; height:60px; }
+      .apple{ width:36px; height:36px; }
+      .frame{ border-radius:12px;}
+      .topbar{padding:8px;}
+      .scoreBox{font-size:14px}
+    }
+
+  </style>
+</head>
+<body>
+  <div class="frame" id="frame">
+    <!-- Top UI -->
+    <div class="topbar">
+      <div class="left-ui">
+        <button id="restartBtn" class="btn" title="Restart (removes apples and resets score)">⟲ Restart</button>
+      </div>
+
+      <div class="center-ui" style="flex:1; justify-content:center;">
+        <!-- Score & High Score centered -->
+        <div class="scoreBox" id="scoreBox" aria-live="polite">Score: 0</div>
+        <div style="width:12px"></div>
+        <div class="scoreBox" id="highScoreBox">High-Score: 0</div>
+      </div>
+
+      <div class="right-ui" style="justify-content:flex-end;">
+        <div class="livesBadge" id="livesBadge">❤ x 3</div>
+        <button id="pauseBtn" class="btn" title="Pause / Resume">⏸ Pause</button>
+      </div>
+    </div>
+
+    <!-- Play area -->
+    <div class="playArea" id="playArea" tabindex="0" aria-label="Game play area">
+      <!-- hud center (duplicate but positioned in play area for visual parity if needed) -->
+      <div class="hudTopCenter" id="hudTopCenter" aria-hidden="true"></div>
+
+     <!-- Basket element -->
+<div id="basket">
+  <!-- SVG Brown Basket Icon -->
+  <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+    <path fill="#8B4513" d="M12 28h40l-4 28H16z"/>
+    <path fill="#A0522D" d="M24 12h16l4 16H20z"/>
+    <rect x="18" y="24" width="28" height="4" fill="#654321"/>
+    <rect x="20" y="28" width="24" height="2" fill="#3E2723"/>
+  </svg>
+</div>
+
+      <!-- Game over overlay -->
+      <div class="overlay" id="overlay">
+        <h1 id="gameOverTitle">Game Over</h1>
+        <p id="gameOverScore">Score: 0 — High-Score: 0</p>
+        <div style="display:flex;gap:10px;">
+          <button id="overlayRestart" class="btn">Restart</button>
+          <button id="overlayClose" class="btn">Close</button>
+        </div>
+        <div class="small">Tip: Move the mouse / touch to move the basket. Tap Restart to play again.</div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+/*
+  Catch the Falling Objects
+  Single-file game:
+   - Basket follows mouse horizontally (touch supported)
+   - Apples spawn from top at random X and fall down
+   - Catching apple increments score
+   - Missing apple reduces lives; at 0 -> Game Over overlay
+   - Restart button resets the game
+   - Pause button toggles game loop
+   - Falling speed increases as the score grows (progressive difficulty)
+   - High score stored in localStorage
+*/
+
+/* -------------------------
+   Configuration
+   ------------------------- */
+const CONFIG = {
+  appleSrc: "https://cdn-icons-png.flaticon.com/512/415/415733.png", // apple PNG
+  basketWidth: 120,            // default width in px (CSS will scale for responsiveness)
+  basketHeight: 80,
+  initialLives: 3,
+  initialSpawnInterval: 1100,  // ms
+  spawnIntervalMin: 350,
+  baseFallSpeed: 1.8,          // px per frame baseline
+  speedIncreasePerScore: 0.08, // additional px/frame per score
+  maxFallSpeed: 10.5,
+  appleSize: 44,               // default apple size (CSS maps)
+  maxApplesOnScreen: 12
+};
+
+/* -------------------------
+   Element references
+   ------------------------- */
+const playArea = document.getElementById("playArea");
+const basketEl = document.getElementById("basket");
+const scoreBox = document.getElementById("scoreBox");
+const highScoreBox = document.getElementById("highScoreBox");
+const livesBadge = document.getElementById("livesBadge");
+const restartBtn = document.getElementById("restartBtn");
+const pauseBtn = document.getElementById("pauseBtn");
+const overlay = document.getElementById("overlay");
+const overlayRestart = document.getElementById("overlayRestart");
+const overlayClose = document.getElementById("overlayClose");
+const gameOverTitle = document.getElementById("gameOverTitle");
+const gameOverScore = document.getElementById("gameOverScore");
+
+/* -------------------------
+   Game state
+   ------------------------- */
+let state = {
+  score: 0,
+  highScore: Number(localStorage.getItem("catch_highscore") || 0),
+  lives: CONFIG.initialLives,
+  running: true,
+  paused: false,
+  apples: [], // array of apple objects
+  lastSpawn: 0,
+  spawnInterval: CONFIG.initialSpawnInterval,
+  basketX: null, // current left position of basket in px
+  playAreaRect: null,
+  animationFrame: null
+};
+
+/* Initialize UI from saved highscore */
+highScoreBox.textContent = "High-Score: " + state.highScore;
+scoreBox.textContent = "Score: 0";
+livesBadge.textContent = `❤ x ${state.lives}`;
+
+/* -------------------------
+   Utilities
+   ------------------------- */
+// Returns a random number between min and max
+function rand(min, max) { return Math.random() * (max - min) + min; }
+
+// Clamp value
+function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+/* -------------------------
+   Apple creation + representation
+   ------------------------- */
+function makeAppleElement(x, size=CONFIG.appleSize) {
+  const d = document.createElement("div");
+  d.className = "apple";
+  d.style.left = x + "px";
+  d.style.top = "-60px";
+  d.style.width = size + "px";
+  d.style.height = size + "px";
+
+  const img = document.createElement("img");
+  img.src = CONFIG.appleSrc;
+  img.alt = "apple";
+  d.appendChild(img);
+  playArea.appendChild(d);
+  return d;
+}
+
+/* Create a new apple object with its element and dynamic properties */
+function spawnApple() {
+  if (!state.running || state.paused) return;
+  // Limit apples on screen
+  if (state.apples.length >= CONFIG.maxApplesOnScreen) return;
+
+  const rect = state.playAreaRect;
+  const size = clamp(Math.round(rand(CONFIG.appleSize*0.8, CONFIG.appleSize*1.1)), 30, 56);
+  const x = rand(6, rect.width - size - 6); // keep some padding
+  const el = makeAppleElement(x, size);
+
+  const baseSpeed = CONFIG.baseFallSpeed + state.score * CONFIG.speedIncreasePerScore;
+  const speed = clamp(baseSpeed * rand(0.9, 1.25), CONFIG.baseFallSpeed, CONFIG.maxFallSpeed);
+
+  const apple = {
+    el,
+    x,          // left px relative to playArea
+    y: -size - rand(6,40), // start a bit above
+    size,
+    speed,
+    rotation: rand(-12,12),
+    rotationSpeed: rand(-0.8,0.8),
+    caught: false
+  };
+
+  // set initial transform
+  apple.el.style.transform = `translateY(${apple.y}px) rotate(${apple.rotation}deg)`;
+
+  state.apples.push(apple);
+}
+
+/* -------------------------
+   Basket positioning (mouse + touch)
+   ------------------------- */
+function updateBasketPositionFromPointer(clientX) {
+  // get playArea rectangle
+  const rect = state.playAreaRect || playArea.getBoundingClientRect();
+  // compute relative x (inside play area)
+  const relX = clientX - rect.left;
+  const bw = basketEl.offsetWidth;
+  const allowedLeft = clamp(relX, 0, rect.width);
+  // place basket center at cursor (but keep fully inside)
+  const left = clamp(allowedLeft - bw/2, 6, rect.width - bw - 6);
+  state.basketX = left;
+  basketEl.style.left = left + "px";
+}
+
+/* Mouse move handler */
+function onMouseMove(e){
+  if (!state.running || state.paused) return;
+  updateBasketPositionFromPointer(e.clientX);
+}
+
+/* Touch handler support (touchmove) */
+function onTouchMove(e){
+  if (!state.running || state.paused) return;
+  if (!e.touches || e.touches.length === 0) return;
+  updateBasketPositionFromPointer(e.touches[0].clientX);
+}
+
+/* When window resizes, cache playArea rect */
+function refreshPlayAreaRect(){
+  state.playAreaRect = playArea.getBoundingClientRect();
+  // Ensure basket remains inside
+  const bw = basketEl.offsetWidth;
+  if (state.basketX == null){
+    // initialize to center
+    state.basketX = clamp(state.playAreaRect.width/2 - bw/2, 6, state.playAreaRect.width - bw - 6);
+    basketEl.style.left = state.basketX + "px";
+  } else {
+    state.basketX = clamp(state.basketX, 6, state.playAreaRect.width - bw - 6);
+    basketEl.style.left = state.basketX + "px";
+  }
+}
+
+/* -------------------------
+   Collision detection
+   ------------------------- */
+/* A simple AABB collision between apple and basket */
+function checkAppleCaught(apple){
+  const rect = state.playAreaRect;
+  const basketRect = basketEl.getBoundingClientRect();
+  const appleRect = apple.el.getBoundingClientRect();
+
+  // apple bottom and basket top collisions, but consider relative to playArea
+  const caught = (
+    appleRect.bottom >= basketRect.top + 6 && // apple touches top area of basket
+    appleRect.left + apple.size*0.15 < basketRect.right &&
+    appleRect.right - apple.size*0.15 > basketRect.left
+  );
+
+  return caught;
+}
+
+/* -------------------------
+   Game loop
+   ------------------------- */
+function gameLoop(ts){
+  if (!state.running) return;
+  if (state.paused){
+    state.animationFrame = requestAnimationFrame(gameLoop);
+    return;
+  }
+
+  // spawn logic: spawn more often as score increases
+  const now = performance.now();
+  // dynamic spawn interval reduces with score
+  const dynamicInterval = clamp(CONFIG.initialSpawnInterval - Math.floor(state.score*18), CONFIG.spawnIntervalMin, CONFIG.initialSpawnInterval);
+  if (now - state.lastSpawn > dynamicInterval){
+    spawnApple();
+    state.lastSpawn = now;
+  }
+
+  // cache playArea rect if not present
+  if (!state.playAreaRect) refreshPlayAreaRect();
+
+  // update apples - move them down and rotate slightly
+  for (let i = state.apples.length - 1; i >= 0; --i){
+    const a = state.apples[i];
+    if (!a || !a.el) { state.apples.splice(i,1); continue; }
+
+    a.y += a.speed;                // fall
+    a.rotation += a.rotationSpeed; // rotate slowly
+
+    a.el.style.transform = `translateY(${a.y}px) rotate(${a.rotation}deg)`;
+
+    // check caught
+    if (!a.caught && checkAppleCaught(a)){
+      a.caught = true;
+      // animate apple into basket and then remove
+      scorePoint(a);
+      continue; // don't check for miss (it will be removed)
+    }
+
+    // check for miss (passed bottom of play area)
+    const rect = state.playAreaRect;
+    if (a.y - a.size > rect.height + 40){
+      // apple missed
+      missApple(a);
+      continue;
+    }
+  }
+
+  // schedule next frame
+  state.animationFrame = requestAnimationFrame(gameLoop);
+}
+
+/* -------------------------
+   Score / catch / miss
+   ------------------------- */
+function scorePoint(apple){
+  if (!apple || !apple.el) return;
+  // increment and update UI
+  state.score += 1;
+  scoreBox.textContent = "Score: " + state.score;
+
+  // animate apple "pop" into basket then remove
+  apple.el.style.transition = "transform 0.28s cubic-bezier(.2,.9,.2,1), opacity 0.22s";
+  const basketRect = basketEl.getBoundingClientRect();
+  const appleRect = apple.el.getBoundingClientRect();
+
+  // target translate so apple sits inside basket visually
+  const targetX = (basketRect.left + basketRect.width/2) - appleRect.left - apple.size/2;
+  const targetY = (basketRect.top + basketRect.height*0.1) - appleRect.top;
+
+  apple.el.style.transform = `translate(${targetX}px, ${targetY}px) rotate(${rand(-45,45)}deg) scale(0.75)`;
+  apple.el.style.opacity = "0.98";
+
+  // remove after short delay
+  setTimeout(()=>{
+    if (apple.el && apple.el.parentNode) apple.el.parentNode.removeChild(apple.el);
+  }, 320);
+
+  // remove from state list
+  state.apples = state.apples.filter(a => a !== apple);
+
+  // update high score if needed
+  if (state.score > state.highScore){
+    state.highScore = state.score;
+    localStorage.setItem("catch_highscore", state.highScore);
+    highScoreBox.textContent = "High-Score: " + state.highScore;
+  }
+}
+
+/* When apple missed basket */
+function missApple(apple){
+  if (!apple) return;
+  // remove element
+  if (apple.el && apple.el.parentNode) apple.el.parentNode.removeChild(apple.el);
+  state.apples = state.apples.filter(a => a !== apple);
+
+  state.lives -= 1;
+  livesBadge.textContent = `❤ x ${state.lives}`;
+
+  if (state.lives <= 0){
+    onGameOver();
+  } else {
+    // small visual feedback: flash basket
+    basketEl.style.filter = "brightness(0.96) saturate(0.9) contrast(1.05)";
+    setTimeout(()=> basketEl.style.filter = "", 180);
+  }
+}
+
+/* -------------------------
+   Game Over / Restart
+   ------------------------- */
+function onGameOver(){
+  state.running = false;
+  state.paused = false;
+  // stop loop
+  if (state.animationFrame) cancelAnimationFrame(state.animationFrame);
+  // show overlay with final score
+  overlay.style.display = "flex";
+  gameOverTitle.textContent = "Game Over";
+  gameOverScore.textContent = `Score: ${state.score} — High-Score: ${state.highScore}`;
+}
+
+function resetGame(){
+  // clear all apples
+  state.apples.forEach(a=>{
+    if (a.el && a.el.parentNode) a.el.parentNode.removeChild(a.el);
+  });
+  state.apples = [];
+
+  // reset state values
+  state.score = 0;
+  state.lives = CONFIG.initialLives;
+  state.running = true;
+  state.paused = false;
+  state.lastSpawn = performance.now();
+  state.spawnInterval = CONFIG.initialSpawnInterval;
+
+  scoreBox.textContent = "Score: 0";
+  livesBadge.textContent = `❤ x ${state.lives}`;
+  highScoreBox.textContent = "High-Score: " + state.highScore;
+
+  overlay.style.display = "none";
+
+  // ensure play area rect updated
+  refreshPlayAreaRect();
+
+  // resume loop
+  if (state.animationFrame) cancelAnimationFrame(state.animationFrame);
+  state.animationFrame = requestAnimationFrame(gameLoop);
+}
+
+/* Pause toggle */
+function togglePause(){
+  if (!state.running) return;
+  state.paused = !state.paused;
+  pauseBtn.textContent = state.paused ? "▶ Resume" : "⏸ Pause";
+  pauseBtn.setAttribute("aria-pressed", state.paused ? "true" : "false");
+}
+
+/* -------------------------
+   Input wiring & UI handlers
+   ------------------------- */
+function attachEventHandlers(){
+  // pointer + touch
+  playArea.addEventListener("mousemove", onMouseMove);
+  playArea.addEventListener("touchmove", onTouchMove, {passive:true});
+
+  // for devices where users might move mouse outside, add global move too
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("touchmove", onTouchMove, {passive:true});
+
+  // resize handling to recalc rect and keep basket inside
+  window.addEventListener("resize", ()=>{
+    refreshPlayAreaRect();
+  });
+
+  // restart button
+  restartBtn.addEventListener("click", ()=>{
+    resetGame();
+  });
+
+  // pause button
+  pauseBtn.addEventListener("click", ()=>{
+    togglePause();
+  });
+
+  // overlay restart + close
+  overlayRestart.addEventListener("click", ()=>{
+    resetGame();
+  });
+  overlayClose.addEventListener("click", ()=>{
+    overlay.style.display = "none";
+  });
+
+  // keyboard support: space to pause, r to restart
+  window.addEventListener("keydown", (e)=>{
+    if (e.key === " " || e.key === "Spacebar") { // toggle pause
+      e.preventDefault();
+      togglePause();
+    } else if (e.key.toLowerCase() === "r") {
+      resetGame();
+    }
+  });
+
+  // make playArea focusable to receive keyboard on mobile browsers that focus
+  playArea.addEventListener("click", ()=> playArea.focus());
+}
+
+/* -------------------------
+   Initialization
+   ------------------------- */
+function init(){
+  // compute play area rectangle and basket
+  refreshPlayAreaRect();
+
+  // position basket centered
+  const bw = basketEl.offsetWidth;
+  state.basketX = clamp(state.playAreaRect.width/2 - bw/2, 6, state.playAreaRect.width - bw - 6);
+  basketEl.style.left = state.basketX + "px";
+
+  // start main loop
+  state.animationFrame = requestAnimationFrame(gameLoop);
+
+  // attach events
+  attachEventHandlers();
+}
+
+/* -------------------------
+   Kick off initialization when the DOM is ready
+   ------------------------- */
+window.addEventListener("load", ()=>{
+  // minor delay to allow images to layout
+  setTimeout(()=> {
+    init();
+  }, 80);
+});
+
+</script>
+</body>
+</html>
