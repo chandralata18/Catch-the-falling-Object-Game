@@ -129,26 +129,6 @@ That's it — the game runs instantly.
 
 ---
 
-🎨 Customization
-
-Game behavior can be modified via the `CONFIG` object in the script.
-
-Example configuration:
-
-```javascript
-const CONFIG = {
-  appleSrc: "apple.png",
-  basketWidth: 120,
-  basketHeight: 80,
-  initialLives: 3,
-  initialSpawnInterval: 1100,
-  spawnIntervalMin: 350,
-  baseFallSpeed: 1.8,
-  speedIncreasePerScore: 0.08,
-  maxFallSpeed: 10.5,
-  appleSize: 44
-};
-```
 
 📄 License
 
